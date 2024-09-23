@@ -5,15 +5,30 @@ from .utils import upload_image
 product_bp = Blueprint('products', __name__)
 
 # GET all products
+# GET all products with support for 'limit' and 'sort'
 @product_bp.route('/products', methods=['GET'])
 def get_products():
-    products = Product.query.all()
+    # Get query parameters for limit and sort
+    limit = request.args.get('limit', default=6, type=int)  # Default limit of 6 products
+    sort = request.args.get('sort', default='created_at_desc')  # Default sort by 'created_at' descending
+
+    # Define sorting logic
+    if sort == 'created_at_asc':
+        sort_column = Product.created_at.asc()
+    else:  # Default to descending
+        sort_column = Product.created_at.desc()
+
+    # Query the products, applying sorting and limiting the results
+    products = Product.query.order_by(sort_column).limit(limit).all()
+
+    # Return the product data
     return jsonify([{
         "id": product.id,
         "name": product.name,
         "description": product.description,
         "price": product.price,
-        "category": product.category,
+        "category_id": product.category_id, 
+        "category": product.category.name,  
         "stock": product.stock,
         "image_url": product.image_url
     } for product in products])
@@ -40,7 +55,7 @@ def add_product():
         name=data['name'],
         description=data.get('description'),
         price=data['price'],
-        category=data['category'],
+        category_id=data['category_id'],
         stock=data.get('stock', 0),
         image_url=data.get('imageUrl')  
     )
