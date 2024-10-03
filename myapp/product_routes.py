@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request, abort
-from .models import Product, Category, db
+from .models import Product, Category, Order, db
 from .utils import upload_image
 
 product_bp = Blueprint('products', __name__)
@@ -42,11 +42,13 @@ def get_product(id):
         "name": product.name,
         "description": product.description,
         "price": product.price,
-        "category": product.category,
+        "category": {
+            "id": product.category.id,  
+            "name": product.category.name
+        },
         "stock": product.stock,
         "image_url": product.image_url
     })
-
 # POST a new product
 @product_bp.route('/products', methods=['POST'])
 def add_product():
@@ -124,3 +126,39 @@ def uploadd_image():
         return jsonify(result), 200
     else:
         return jsonify({"error": "Image upload failed"}), 500
+    
+
+@product_bp.route('/orders', methods=['POST'])
+def create_order():
+    data = request.json
+    cart = data.get('cart', [])
+    
+    if not cart:
+        return jsonify({'success': False, 'message': 'Cart is empty.'})
+
+    order_items = []
+    total_price = 0
+
+    for item in cart:
+        product = Product.query.get(item['id'])
+        if not product or item['quantity'] > product.stock:
+            return jsonify({'success': False, 'message': f'Insufficient stock for {item["name"]}'})
+        
+        # Create order items
+        order = Order(
+            product_id=item['id'],
+            user_id=current_user.id, 
+            quantity=item['quantity'],
+            total_price=item['quantity'] * product.price
+        )
+        order_items.append(order)
+
+        # Update stock
+        product.stock -= item['quantity']
+        total_price += item['quantity'] * product.price
+
+    # Commit all orders and stock changes
+    db.session.add_all(order_items)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Order placed successfully!'})
