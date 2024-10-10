@@ -1,10 +1,37 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-# from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from .models import User, db
 
 auth_bp = Blueprint('auth', __name__)
 
+# Route for user signup
+@auth_bp.route('/signup', methods=['POST'])
+def signup():
+    data = request.get_json()
+
+    # Basic validation for required fields
+    if not data.get('username') or not data.get('email') or not data.get('password'):
+        return jsonify({"message": "Missing required fields"}), 400
+
+    # Check if the username or email already exists
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify({"message": "Username already exists"}), 400
+
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({"message": "Email already exists"}), 400
+
+    # Hash the password and create a new user
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+    new_user = User(username=data['username'], email=data['email'], password_hash=hashed_password)
+
+    # Save the user to the database
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+# Route for user login
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -13,7 +40,7 @@ def login():
     if not data.get('username') or not data.get('password'):
         return jsonify({"message": "Missing username or password"}), 400
 
-    # Find the user in the database
+    # Find the user in the database by username
     user = User.query.filter_by(username=data['username']).first()
 
     if not user:
@@ -23,37 +50,56 @@ def login():
     if not check_password_hash(user.password_hash, data['password']):
         return jsonify({"message": "Invalid password"}), 401
 
-    # If credentials are correct, create tokens (JWT)
-    # access_token = create_access_token(identity=user.public_id)
-    # refresh_token = create_refresh_token(identity=user.public_id)
+    # Generate JWT access token
+    access_token = create_access_token(identity={"id": user.id, "username": user.username, "is_admin": user.is_admin})
 
     return jsonify({
         "message": "Login successful",
-        # "access_token": access_token,
-        # "refresh_token": refresh_token
+        "access_token": access_token
     }), 200
 
+# Route to get the current user details (Protected)
+@auth_bp.route('/profile', methods=['GET'])
+@jwt_required()
+def get_profile():
+    current_user = get_jwt_identity()
+    
+    user = User.query.get(current_user['id'])
+    if not user:
+        return jsonify({"message": "User not found"}), 404
 
-@auth_bp.route('/signup', methods=['POST'])
-def signup():
+    return jsonify({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin
+    }), 200
+
+# Route for users to update their profile (Protected)
+@auth_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    current_user = get_jwt_identity()
+    user = User.query.get(current_user['id'])
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
     data = request.get_json()
+    user.username = data.get('username', user.username)
+    user.email = data.get('email', user.email)
 
-    # Basic validation
-    if not data.get('username') or not data.get('email') or not data.get('password'):
-        return jsonify({"message": "Missing required fields"}), 400
+    # Optionally update the password
+    if data.get('password'):
+        user.password_hash = generate_password_hash(data['password'], method='pbkdf2:sha256')
 
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({"message": "Username already exists"}), 400
-
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({"message": "Email already exists"}), 400
-
-    # Password hashing
-    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    new_user = User(username=data['username'], email=data['email'], password_hash=hashed_password)
-
-    # Save to database
-    db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({"message": "User registered successfully"}), 201
+    return jsonify({"message": "Profile updated successfully"}), 200
+
+# Route for user logout (if using JWT Blacklisting, optional)
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    # Implement blacklisting if necessary, otherwise token expires automatically
+    return jsonify({"message": "Logout successful"}), 200
