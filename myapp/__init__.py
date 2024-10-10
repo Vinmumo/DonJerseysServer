@@ -1,22 +1,24 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager  
 from .config import Config
 from .extensions import db, migrate
 from flask_cors import CORS
-
-
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
-
     CORS(app)
 
-    # Import and register your blueprints (routes)
+    
+    jwt = JWTManager(app)
+
+    # blueprint registration 
     from .auth_routes import auth_bp
     from .admin_routes import admin_bp
     from .product_routes import product_bp

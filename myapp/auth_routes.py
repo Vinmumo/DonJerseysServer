@@ -31,22 +31,20 @@ def signup():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-# Route for user login
+# Route for user login (adjusted)
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
 
-    # Check if both fields are provided
-    if not data.get('username') or not data.get('password'):
-        return jsonify({"message": "Missing username or password"}), 400
+    if not data.get('identifier') or not data.get('password'):
+        return jsonify({"message": "Missing username/email or password"}), 400
 
-    # Find the user in the database by username
-    user = User.query.filter_by(username=data['username']).first()
+    # Find user by username or email
+    user = User.query.filter((User.username == data['identifier']) | (User.email == data['identifier'])).first()
 
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    # Check if the password matches
     if not check_password_hash(user.password_hash, data['password']):
         return jsonify({"message": "Invalid password"}), 401
 
@@ -55,8 +53,14 @@ def login():
 
     return jsonify({
         "message": "Login successful",
-        "access_token": access_token
+        "access_token": access_token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
     }), 200
+
 
 # Route to get the current user details (Protected)
 @auth_bp.route('/profile', methods=['GET'])
