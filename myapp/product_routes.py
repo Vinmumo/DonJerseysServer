@@ -9,7 +9,7 @@ product_bp = Blueprint('products', __name__)
 @product_bp.route('/products', methods=['GET'])
 def get_products():
     # Get query parameters for limit and sort
-    limit = request.args.get('limit', default=6, type=int)  # Default limit of 6 products
+    # limit = request.args.get('limit', default=6, type=int)
     sort = request.args.get('sort', default='created_at_desc')  # Default sort by 'created_at' descending
 
     # Define sorting logic
@@ -19,7 +19,7 @@ def get_products():
         sort_column = Product.created_at.desc()
 
     # Query the products, applying sorting and limiting the results
-    products = Product.query.order_by(sort_column).limit(limit).all()
+    products = Product.query.order_by(sort_column).all()
 
     # Return the product data
     return jsonify([{
@@ -108,7 +108,19 @@ def count_products_by_category():
 
 @product_bp.route('/products/by-category/<int:category_id>', methods=['GET'])
 def get_products_by_category(category_id):
-    products = Product.query.filter_by(category_id=category_id).all()
+    # Add query parameters for limit and sort
+    limit = request.args.get('limit', default=6, type=int)
+    sort = request.args.get('sort', default='created_at_desc')
+
+    # Define sorting logic
+    if sort == 'created_at_asc':
+        sort_column = Product.created_at.asc()
+    else:
+        sort_column = Product.created_at.desc()
+
+    # Query products filtered by category, sorted, and limited
+    products = Product.query.filter_by(category_id=category_id).order_by(sort_column).limit(limit).all()
+
     return jsonify([{
         'id': product.id,
         'name': product.name,
@@ -119,14 +131,15 @@ def get_products_by_category(category_id):
     } for product in products])
 
 @product_bp.route('/upload', methods=['POST'])
-def uploadd_image():
+def upload_image():
     image = request.files['file']
-    result = upload_image(image)  
+    result = upload_image(image)
+    
     if result:
-        return jsonify(result), 200
+        return jsonify({'image_url': result['url']}), 200
     else:
         return jsonify({"error": "Image upload failed"}), 500
-    
+
 
 @product_bp.route('/orders', methods=['POST'])
 def create_order():
