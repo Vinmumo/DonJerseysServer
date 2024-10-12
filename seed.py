@@ -1,12 +1,11 @@
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
-from myapp import create_app 
+from myapp import create_app
 from myapp.models import User, Category, Product, Order
 from myapp.extensions import db
 
 # Mock data
 def seed_data():
-    # admin and regular users
+    # Create admin and regular users
     users = [
         User(username="admin", email="admin@example.com", password_hash=generate_password_hash("admin123"), is_admin=True),
         User(username="john_doe", email="john@example.com", password_hash=generate_password_hash("password")),
@@ -20,7 +19,7 @@ def seed_data():
         Category(name="Gym Equipment"),
     ]
 
-   
+    # Add products with mock image URLs
     products = [
         # Arsenal Jerseys
         Product(name="Arsenal Home Jersey 2024", description="Latest Arsenal home jersey.", price=1500, category_id=1, image_url="https://i1.adis.ws/i/ArsenalDirect/mit6141_f?&$plpImages$", stock=100),
@@ -45,30 +44,23 @@ def seed_data():
         Product(name="Yoga Pants", description="Flexible yoga pants.", price=750, category_id=2, image_url="https://images-na.ssl-images-amazon.com/images/I/41JkukHbj2L._UL500_.jpg", stock=120),
         Product(name="Cycling Shorts", description="Shorts designed for cycling.", price=2300, category_id=2, image_url="https://contents.mediadecathlon.com/p2464583/k$e441ddb57ab55a86c9a4a982d70fb756/essential-men-s-road-cycling-bibless-shorts.jpg?format=auto&quality=40&f=800x800", stock=100),
         Product(name="Boxing Gloves", description="High-quality boxing gloves.", price=7000, category_id=2, image_url="https://contents.mediadecathlon.com/p2604989/k$b5dee32969c43f9d5ee952e6b5222dc5/ergonomic-boxing-gloves-120-pink.jpg?format=auto&quality=40&f=800x800", stock=50),
-        
+
         # Gym Equipment
         Product(name="Treadmill", description="Electric treadmill with multiple speed settings.", price=200000, category_id=3, image_url="https://contents.mediadecathlon.com/p2332850/k$19c2898171f7fdb9245f3c11c6f11532/t900a-treadmill.jpg?format=auto&quality=40&f=452x452", stock=10),
-        Product(name="Dumbbells", description="Set of adjustable dumbbells.", price=20000, category_id=3, image_url="https://contents.mediadecathlon.com/p2297776/k$62dc0610d1672ffacd9da67f18a6a52a/weight-training-20-kg-threaded-weights-kit.jpg?format=auto&quality=40&f=452x452", stock=50),
-        Product(name="Gym Mat", description="Non-slip gym mat.", price=5000, category_id=3, image_url="https://physioneeds.biz/wp-content/uploads/nc/s/i/sissel_gym_mat.jpg", stock=300),
-        Product(name="Resistance Bands", description="Set of resistance bands for workouts.", price=12.99, category_id=3, image_url="https://m.media-amazon.com/images/I/61jI-MIOlzL.jpg", stock=250),
+        Product(name="Dumbbells", description="Set of adjustable dumbbells.", price=20000, category_id=3, image_url="https://contents.mediadecathlon.com/p2297776/k$62dc0610d1672ffacd9da67f18a9f7a4/set-of-2-weight-training-dumbbells-10-kg.jpg?format=auto&quality=40&f=800x800", stock=100),
+        Product(name="Resistance Bands", description="Durable resistance bands for workouts.", price=600, category_id=3, image_url="https://contents.mediadecathlon.com/p2041789/k$1c5cfd6465b59707399d7e5d7ae2ef14/resistance-band-cross-training-band-5-15-kg-red.jpg?format=auto&quality=40&f=452x452", stock=200),
     ]
 
-    # Add sample orders
-    orders = [
-        Order(user_id=2, product_id=1, quantity=2, status="completed", total_price=2 * 1500),
-        Order(user_id=3, product_id=5, quantity=1, status="pending", total_price=1500),
-    ]
-
-    # Add all to session and commit to the database
-    db.session.add_all(users)
-    db.session.add_all(categories)
-    db.session.add_all(products)
-    db.session.add_all(orders)
+    # Add users, categories, and products to the session
+    db.session.bulk_save_objects(users)
+    db.session.bulk_save_objects(categories)
+    db.session.bulk_save_objects(products)
+    
+    # Commit to save data
     db.session.commit()
 
-    print("Database seeded with more products and related jerseys!")
-
 if __name__ == "__main__":
-    app = create_app() 
-    with app.app_context():  
+    app = create_app()
+    with app.app_context():
+        db.create_all()
         seed_data()

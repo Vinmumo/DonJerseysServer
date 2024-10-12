@@ -31,7 +31,6 @@ def signup():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-# Route for user login (adjusted)
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -48,7 +47,7 @@ def login():
     if not check_password_hash(user.password_hash, data['password']):
         return jsonify({"message": "Invalid password"}), 401
 
-    # Generate JWT access token
+    # Generate JWT access token with user role
     access_token = create_access_token(identity={"id": user.id, "username": user.username, "is_admin": user.is_admin})
 
     return jsonify({
@@ -57,7 +56,8 @@ def login():
         "user": {
             "id": user.id,
             "username": user.username,
-            "email": user.email
+            "email": user.email,
+            "is_admin": user.is_admin  # Add admin status in response
         }
     }), 200
 

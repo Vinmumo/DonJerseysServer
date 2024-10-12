@@ -2,16 +2,14 @@ import os
 from dotenv import load_dotenv
 from datetime import timedelta
 
-
 load_dotenv()
 
-
 class Config:
+    # General configurations
     SECRET_KEY = os.environ.get('SECRET_KEY') or '6ce880509867e095b667acbf863b5a987a647c196ed246a7'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///don.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CLOUDINARY_URL = os.getenv('CLOUDINARY_URL')
-
 
     # JWT configurations
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'fb7735a66fa196e5ed0eb045e3f00f12e6722f88b1793840fb273c4b37dc1d5a') 
@@ -20,3 +18,16 @@ class Config:
     JWT_TOKEN_LOCATION = ['headers', 'cookies']  
     JWT_COOKIE_SECURE = True 
     JWT_COOKIE_CSRF_PROTECT = True 
+
+    # MPESA configurations for Lipa Na Mpesa Online (STK Push)
+    MPESA_CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', '5lwlfIZfoODBLGTrGwUeQbGd6aYLxcyH8I4zHkcXiHDvSt4j')
+    MPESA_CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', 'jn2nhtyQZDHfoZMGG3mnRl1cWG24g6u0iQqJ7NO9nJStW4YmiOWSfme3Ln98TXob')
+    
+    # Sandbox shortcode for testing Lipa Na Mpesa Buy Goods & Services
+    MPESA_SHORTCODE = os.getenv('MPESA_SHORTCODE', '174379')  
+    
+    # passkey for the Lipa Na Mpesa Online (STK Push) integration
+    MPESA_PASSKEY = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf113b1d62f174b4c2')
+    
+    # 'sandbox' for testing and 'production' for live environment
+    MPESA_ENVIRONMENT = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
