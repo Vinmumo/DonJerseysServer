@@ -1,10 +1,13 @@
 from flask import Blueprint, jsonify, request, abort
-from .models import Product, Category, Order, db
+from .models import Product, Category, Order, OrderItem ,db
 from .utils import upload_image
 from datetime import datetime
+from dotenv import load_dotenv
 import requests
 import base64
 import os
+
+load_dotenv()
 
 product_bp = Blueprint('products', __name__)
 
@@ -104,10 +107,10 @@ def delete_product(id):
 @product_bp.route('/products/count-by-category', methods=['GET'])
 def count_products_by_category():
     categories = db.session.query(
-        Category.name, 
-        Category.id, 
-        db.func.count(Product.id).label('count')
-    ).join(Product).group_by(Category.id).all()
+        Category.name,
+        Category.id,
+        db.func.coalesce(db.func.count(Product.id), 0).label('count')
+    ).outerjoin(Product).group_by(Category.id).all()
 
     return jsonify([{
         'category_name': category.name,
@@ -140,14 +143,13 @@ def get_products_by_category(category_id):
     } for product in products])
 
 @product_bp.route('/upload', methods=['POST'])
-def upload_image():
-    image = request.files['file']
-    result = upload_image(image)
-    
-    if result:
-        return jsonify({'image_url': result['url']}), 200
-    else:
-        return jsonify({"error": "Image upload failed"}), 500
+def upload_image_route():  
+    image = request.files.get('file')
+    if image:
+        result = upload_image(image)
+        if result:
+            return jsonify({'image_url': result['url']}), 200
+    return jsonify({"error": "Image upload failed"}), 500
 
 
 
@@ -172,37 +174,49 @@ def create_order():
     if not all([name, email, phone, location]):
         return jsonify({'success': False, 'message': 'All delivery details are required.'})
 
-    order_items = []
     total_price = 0
+    order_items = []
 
+    # Create the main order record
+    order = Order(
+        user_id=None,  # Optional if not requiring login
+        name=name,
+        email=email,
+        phone=phone,
+        location=location,
+        total_price=0,  # Will update after calculating total
+        payment_status='Pending'
+    )
+
+    # Process each cart item
     for item in cart:
-        product = Product.query.get(item['id'])
+        product = Product.query.get(item['product_id'])
         if not product or item['quantity'] > product.stock:
-            return jsonify({'success': False, 'message': f'Insufficient stock for {item["name"]}'})
+            return jsonify({'success': False, 'message': f'Insufficient stock for {item["product_id"]}'})
         
-        # Create order items
-        order = Order(
-            product_id=item['id'],
-            name=name,
-            email=email,
-            phone=phone,
-            location=location,
+        # Create an OrderItem for each product in the cart
+        order_item = OrderItem(
+            product_id=item['product_id'],
             quantity=item['quantity'],
-            total_price=item['quantity'] * product.price
+            unit_price=product.price
         )
-        order_items.append(order)
+        order_items.append(order_item)
 
-        # Update stock
+        # Update stock and total price
         product.stock -= item['quantity']
         total_price += item['quantity'] * product.price
 
-    # Commit all orders and stock changes
-    db.session.add_all(order_items)
+    # Add order items to the order
+    order.items.extend(order_items)
+    order.total_price = total_price  
+
+    # Save everything to the database
+    db.session.add(order)
     db.session.commit()
 
     # Initiate M-Pesa payment
     mpesa_payment_response = initiate_mpesa_payment(phone, total_price)
-    
+
     if mpesa_payment_response['success']:
         return jsonify({'success': True, 'message': 'Order placed and payment successful!'})
     else:
@@ -216,15 +230,18 @@ def initiate_mpesa_payment(phone, total_price):
     consumer_key = os.getenv('MPESA_CONSUMER_KEY')
     consumer_secret = os.getenv('MPESA_CONSUMER_SECRET')
     environment = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
+    
+    recipient_phone_number = os.getenv('MY_PHONE_NUMBER')  # Ensure this is set in your environment variables
 
     # Step 1: Get access token
-    access_token = get_mpesa_access_token(consumer_key, consumer_secret, environment)
+    access_token = get_mpesa_access_token()
+    print("Access Token:", access_token)  # Debugging access token
     if not access_token:
         return {'success': False, 'message': 'Failed to get access token.'}
 
     # Step 2: Prepare the password and timestamp for the request
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    password = base64.b64encode(shortcode.encode('utf-8') + passkey.encode('utf-8') + timestamp.encode('utf-8')).decode('utf-8')
+    password = base64.b64encode((shortcode + passkey + timestamp).encode()).decode('utf-8')
 
     # Step 3: Prepare STK Push request body
     stk_push_url = f'https://{environment}.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
@@ -236,12 +253,12 @@ def initiate_mpesa_payment(phone, total_price):
         "BusinessShortCode": shortcode,
         "Password": password,
         "Timestamp": timestamp,
-        "TransactionType": "CustomerBuyGoodsOnline",  # For Buy Goods and Services
+        "TransactionType": "CustomerPayBillOnline", 
         "Amount": total_price,
-        "PartyA": phone,  # Customer phone number
-        "PartyB": shortcode,  # Your till number
-        "PhoneNumber": phone,  # Same customer phone number
-        "CallBackURL": "https://df84-102-210-25-54.ngrok-free.app//mpesa/callback",
+        "PartyA": phone,  
+        "PartyB": shortcode,  
+        "PhoneNumber": phone, 
+        "CallBackURL": "https://f989-102-210-25-54.ngrok-free.app/mpesa/callback",
         "AccountReference": "Order Payment",
         "TransactionDesc": "Payment for Order"
     }
@@ -249,40 +266,97 @@ def initiate_mpesa_payment(phone, total_price):
     # Step 4: Send the STK Push request
     response = requests.post(stk_push_url, json=body, headers=headers)
     response_data = response.json()
+    print("STK Push Response:", response_data)  # Debugging response data
 
     if response.status_code == 200 and response_data.get('ResponseCode') == '0':
         return {'success': True, 'message': 'STK Push sent successfully'}
     else:
-        return {'success': False, 'message': 'STK Push request failed.'}
+        return {'success': False, 'message': 'STK Push request failed.', 'details': response_data}
 
 
 # Function to get M-Pesa access token
-def get_mpesa_access_token(consumer_key, consumer_secret, environment):
-    auth_url = f'https://{environment}.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-    response = requests.get(auth_url, auth=(consumer_key, consumer_secret))
+def get_mpesa_access_token():
+    url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+    consumer_key = os.getenv("MPESA_CONSUMER_KEY")
+    consumer_secret = os.getenv("MPESA_CONSUMER_SECRET")
 
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    else:
+    if not consumer_key or not consumer_secret:
+        print("Error: Missing M-Pesa consumer key or secret.")
         return None
-    
+
+    # Encode key and secret to base64
+    auth_string = f"{consumer_key}:{consumer_secret}"
+    auth_header = base64.b64encode(auth_string.encode()).decode()
+
+    headers = {
+        "Authorization": f"Basic {auth_header}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json().get("access_token")
+        else:
+            print("Response Status:", response.status_code)
+            print("Response Body:", response.text)
+            return None
+    except requests.RequestException as e:
+        print("Request error:", e)
+        return None
 
 @product_bp.route('/mpesa/callback', methods=['POST'])
 def mpesa_callback():
     data = request.json
-
-    # Safaricom sends the transaction details in the 'Body'
     result_code = data.get('Body', {}).get('stkCallback', {}).get('ResultCode')
     result_desc = data.get('Body', {}).get('stkCallback', {}).get('ResultDesc')
-    merchant_request_id = data.get('Body', {}).get('stkCallback', {}).get('MerchantRequestID')
     checkout_request_id = data.get('Body', {}).get('stkCallback', {}).get('CheckoutRequestID')
+    
+    # Example: Retrieve order by checkout_request_id if stored in Order table
+    order = Order.query.filter_by(checkout_request_id=checkout_request_id).first()
 
-    # Process the callback based on the result
-    if result_code == 0:
-        # Payment successful
-        # You can mark the order as paid in your database or handle further logic
-        return jsonify({'success': True, 'message': 'Payment successful.'})
+    if order:
+        if result_code == 0:
+            # Payment successful
+            order.payment_status = 'Completed'
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Payment successful.'})
+        else:
+            # Payment failed
+            order.payment_status = 'Failed'
+            db.session.commit()
+            return jsonify({'success': False, 'message': f'Payment failed: {result_desc}.'})
     else:
-        # Payment failed
-        # Log the failure or notify the user
-        return jsonify({'success': False, 'message': f'Payment failed: {result_desc}.'})
+        return jsonify({'success': False, 'message': 'Order not found.'}), 404
+
+    
+
+@product_bp.route('/categories', methods=['GET', 'POST'])
+def manage_categories():
+    if request.method == 'GET':
+        # Fetch all categories
+        categories = Category.query.all()
+        return jsonify([{
+            'id': category.id,
+            'name': category.name
+        } for category in categories]), 200
+
+    elif request.method == 'POST':
+        # Add a new category
+        if not request.json or not 'name' in request.json:
+            return jsonify({'error': 'Category name is required'}), 400
+
+        category_name = request.json['name']
+        new_category = Category(name=category_name)
+
+        try:
+            db.session.add(new_category)
+            db.session.commit()
+            return jsonify({'message': 'Category added successfully'}), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+        
+
+token = get_mpesa_access_token()
+print("Access Token:", token)
