@@ -160,73 +160,70 @@ def create_order():
     delivery_details = data.get('delivery_details', {})
 
     if not cart:
-        return jsonify({'success': False, 'message': 'Cart is empty.'})
-
+        print("Order attempt with empty cart.")
+        return jsonify({'success': False, 'message': 'Cart is empty.'}), 400
     if not delivery_details:
-        return jsonify({'success': False, 'message': 'Delivery details are required.'})
+        print("Missing delivery details in order request.")
+        return jsonify({'success': False, 'message': 'Delivery details are required.'}), 400
 
-    # Validate delivery details
     name = delivery_details.get('name')
     email = delivery_details.get('email')
     phone = delivery_details.get('phone')
     location = delivery_details.get('location')
 
-    if not all([name, email, phone, location]):
-        return jsonify({'success': False, 'message': 'All delivery details are required.'})
+    if not all([name, phone, location]):
+        print("Incomplete delivery details provided:", delivery_details)
+        return jsonify({'success': False, 'message': 'All delivery details are required.'}), 400
 
     total_price = 0
     order_items = []
 
-    # Create the main order record
     order = Order(
-        user_id=None,  # Optional if not requiring login
+        user_id=None,
         name=name,
         email=email,
         phone=phone,
         location=location,
-        total_price=0,  # Will update after calculating total
-        payment_status='Pending'
+        total_price=0,
+        payment_status='Payment on Delivery'
     )
 
-    # Process each cart item
     for item in cart:
-        product = Product.query.get(item['product_id'])
-        if not product or item['quantity'] > product.stock:
-            return jsonify({'success': False, 'message': f'Insufficient stock for {item["product_id"]}'})
-        
-        # Create an OrderItem for each product in the cart
-        order_item = OrderItem(
-            product_id=item['product_id'],
+        product = Product.query.get(item['id'])
+        if not product:
+            print(f"Product with ID {item['product_id']} not found.")
+            return jsonify({'success': False, 'message': f"Product with ID {item['product_id']} not found."}), 404
+        if item['quantity'] > product.stock:
+            print(f"Requested quantity for {product.name} exceeds stock.")
+            return jsonify({'success': False, 'message': f"Requested quantity for {product.name} exceeds stock."}), 400
+
+        total_price += product.price * item['quantity']
+        order_items.append(OrderItem(
+            product_id=product.id,
             quantity=item['quantity'],
-            unit_price=product.price
-        )
-        order_items.append(order_item)
+            unit_price=product.price,
+            size=item.get('size')
+        ))
 
-        # Update stock and total price
-        product.stock -= item['quantity']
-        total_price += item['quantity'] * product.price
-
-    # Add order items to the order
-    order.items.extend(order_items)
-    order.total_price = total_price  
-
-    # Save everything to the database
+    order.total_price = total_price
     db.session.add(order)
     db.session.commit()
 
-    # Initiate M-Pesa payment
-    mpesa_payment_response = initiate_mpesa_payment(phone, total_price)
+    for item in order_items:
+        item.order_id = order.id
+        db.session.add(item)
+    db.session.commit()
 
-    if mpesa_payment_response['success']:
-        return jsonify({'success': True, 'message': 'Order placed and payment successful!'})
-    else:
-        return jsonify({'success': False, 'message': 'Payment failed. Try again.'})
+    print("Order created successfully:", order.id)
+    return jsonify({'success': True, 'order_id': order.id}), 201
+
+
+
 
 
 # Function to initiate M-Pesa STK Push
 def initiate_mpesa_payment(phone, total_price):
-    shortcode = os.getenv('MPESA_SHORTCODE')
-    passkey = os.getenv('MPESA_PASSKEY')
+    shortcode = str(174379)
     consumer_key = os.getenv('MPESA_CONSUMER_KEY')
     consumer_secret = os.getenv('MPESA_CONSUMER_SECRET')
     environment = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
@@ -241,7 +238,7 @@ def initiate_mpesa_payment(phone, total_price):
 
     # Step 2: Prepare the password and timestamp for the request
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    password = base64.b64encode((shortcode + passkey + timestamp).encode()).decode('utf-8')
+    password = base64.b64encode((shortcode + timestamp).encode()).decode('utf-8')
 
     # Step 3: Prepare STK Push request body
     stk_push_url = f'https://{environment}.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
@@ -258,7 +255,7 @@ def initiate_mpesa_payment(phone, total_price):
         "PartyA": phone,  
         "PartyB": shortcode,  
         "PhoneNumber": phone, 
-        "CallBackURL": "https://f989-102-210-25-54.ngrok-free.app/mpesa/callback",
+        "CallBackURL": "https://bdfb-102-210-25-54.ngrok-free.app/mpesa/callback",
         "AccountReference": "Order Payment",
         "TransactionDesc": "Payment for Order"
     }
@@ -269,9 +266,17 @@ def initiate_mpesa_payment(phone, total_price):
     print("STK Push Response:", response_data)  # Debugging response data
 
     if response.status_code == 200 and response_data.get('ResponseCode') == '0':
-        return {'success': True, 'message': 'STK Push sent successfully'}
+        return {
+            'success': True,
+            'message': 'STK Push sent successfully',
+            'checkout_request_id': response_data.get('CheckoutRequestID')
+        }
     else:
-        return {'success': False, 'message': 'STK Push request failed.', 'details': response_data}
+        return {
+            'success': False,
+            'message': 'STK Push request failed.',
+            'details': response_data
+        }
 
 
 # Function to get M-Pesa access token
@@ -356,6 +361,41 @@ def manage_categories():
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
+
+
+@product_bp.route('/getorders', methods=['GET'])
+def get_orders():
+    orders = Order.query.all()
+    orders_data = [
+        {
+            "id": order.id,
+            "user": {
+                "username": order.user.username if order.user else "Guest",
+                "email": order.user.email if order.user else order.email  # Fallback to order email if no user is linked
+            },
+            "name": order.name,
+            "phone": order.phone,
+            "location": order.location,
+            "total_price": order.total_price,
+            "order_date": order.order_date.isoformat(),
+            "payment_status": order.payment_status,
+            "order_items": [
+                {
+                    "product_name": item.product.name,
+                    "description": item.product.description,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "size": item.size,
+                    "total_item_price": item.quantity * item.unit_price
+                }
+                for item in order.items  # Using the 'items' relationship in the Order model
+            ]
+        }
+        for order in orders
+    ]
+    return jsonify(orders_data)
+
+
         
 
 token = get_mpesa_access_token()

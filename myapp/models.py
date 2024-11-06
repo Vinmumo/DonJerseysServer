@@ -27,13 +27,15 @@ class Product(db.Model):
     image_url = db.Column(db.String(255))
     stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now(), nullable=False)
+    size = db.Column(db.String(20), nullable=True)  # New size column
+
 
 # Order model to track orders made by users
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=True)
     phone = db.Column(db.String(15), nullable=False)
     location = db.Column(db.String(255), nullable=False)
     total_price = db.Column(db.Float, nullable=False)
@@ -47,5 +49,7 @@ class OrderItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    unit_price = db.Column(db.Float, nullable=False)  # Price per unit at the time of order
+    unit_price = db.Column(db.Float, nullable=False)
+    size = db.Column(db.String(20), nullable=True) 
     product = db.relationship('Product')
+
