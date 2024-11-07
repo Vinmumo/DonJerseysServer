@@ -27,7 +27,7 @@ class Product(db.Model):
     image_url = db.Column(db.String(255))
     stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now(), nullable=False)
-    size = db.Column(db.String(20), nullable=True)  # New size column
+    sizes = db.Column(db.String, nullable=True)  # Field for storing multiple sizes
 
 
 # Order model to track orders made by users

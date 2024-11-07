@@ -1,8 +1,8 @@
 """initial migration
 
-Revision ID: e8fdaa9e2bd5
+Revision ID: 40232f9c799c
 Revises: 
-Create Date: 2024-10-28 18:07:06.074134
+Create Date: 2024-11-07 15:21:15.757919
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'e8fdaa9e2bd5'
+revision = '40232f9c799c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -38,7 +38,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=True),
     sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('email', sa.String(length=100), nullable=False),
+    sa.Column('email', sa.String(length=100), nullable=True),
     sa.Column('phone', sa.String(length=15), nullable=False),
     sa.Column('location', sa.String(length=255), nullable=False),
     sa.Column('total_price', sa.Float(), nullable=False),
@@ -56,6 +56,7 @@ def upgrade():
     sa.Column('image_url', sa.String(length=255), nullable=True),
     sa.Column('stock', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('sizes', sa.JSON(), nullable=True),
     sa.ForeignKeyConstraint(['category_id'], ['category.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -65,6 +66,7 @@ def upgrade():
     sa.Column('product_id', sa.Integer(), nullable=False),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('unit_price', sa.Float(), nullable=False),
+    sa.Column('size', sa.String(length=20), nullable=True),
     sa.ForeignKeyConstraint(['order_id'], ['order.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['product.id'], ),
     sa.PrimaryKeyConstraint('id')

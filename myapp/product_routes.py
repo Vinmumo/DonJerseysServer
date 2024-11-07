@@ -3,6 +3,7 @@ from .models import Product, Category, Order, OrderItem ,db
 from .utils import upload_image
 from datetime import datetime
 from dotenv import load_dotenv
+import json
 import requests
 import base64
 import os
@@ -49,36 +50,58 @@ def get_products():
 @product_bp.route('/products/<int:id>', methods=['GET'])
 def get_product(id):
     product = Product.query.get_or_404(id)
+    
+    # Directly assign sizes if it's already a list
+    sizes = product.sizes if product.sizes else []
+    
     return jsonify({
         "id": product.id,
         "name": product.name,
         "description": product.description,
         "price": product.price,
         "category": {
-            "id": product.category.id,  
+            "id": product.category.id,
             "name": product.category.name
         },
         "stock": product.stock,
-        "image_url": product.image_url
+        "image_url": product.image_url,
+        "sizes": sizes  # Include sizes in the response
     })
+
+
 # POST a new product
 @product_bp.route('/products', methods=['POST'])
 def add_product():
     data = request.json
+    
+    # Check if sizes is a list; if so, use it directly. Otherwise, split it.
+    sizes = data.get('sizes', [])
+    if isinstance(sizes, str):
+        sizes = [size.strip() for size in sizes.split(',') if size.strip()]
+    elif isinstance(sizes, list):
+        sizes = [size.strip() for size in sizes if size.strip()]
+    
+    # Convert list to JSON string
+    sizes_json = json.dumps(sizes)
+
     new_product = Product(
         name=data['name'],
         description=data.get('description'),
         price=data['price'],
         category_id=data['category_id'],
         stock=data.get('stock', 0),
-        image_url=data.get('imageUrl')  
+        image_url=data.get('imageUrl'),
+        sizes=sizes_json  # Store JSON-encoded sizes
     )
+
     db.session.add(new_product)
     db.session.commit()
+
     return jsonify({
         "message": "Product added successfully!",
         "product": new_product.id
     }), 201
+
 
 # PUT (update) an existing product
 @product_bp.route('/products/<int:id>', methods=['PUT'])
@@ -158,65 +181,54 @@ def create_order():
     data = request.json
     cart = data.get('cart', [])
     delivery_details = data.get('delivery_details', {})
+    total_price = data.get('total_price', 0)
 
-    if not cart:
-        print("Order attempt with empty cart.")
-        return jsonify({'success': False, 'message': 'Cart is empty.'}), 400
-    if not delivery_details:
-        print("Missing delivery details in order request.")
-        return jsonify({'success': False, 'message': 'Delivery details are required.'}), 400
+    if not cart or not delivery_details:
+        return jsonify({'success': False, 'message': 'Cart or delivery details are missing.'}), 400
 
+    # Extract delivery details
     name = delivery_details.get('name')
     email = delivery_details.get('email')
     phone = delivery_details.get('phone')
     location = delivery_details.get('location')
 
     if not all([name, phone, location]):
-        print("Incomplete delivery details provided:", delivery_details)
         return jsonify({'success': False, 'message': 'All delivery details are required.'}), 400
 
-    total_price = 0
-    order_items = []
-
+    # Create an Order instance with the total price from frontend
     order = Order(
         user_id=None,
         name=name,
         email=email,
         phone=phone,
         location=location,
-        total_price=0,
+        total_price=total_price,
         payment_status='Payment on Delivery'
     )
+    db.session.add(order)
+    db.session.commit()
 
+    # Add each item as an OrderItem linked to the Order
+    order_items = []
     for item in cart:
         product = Product.query.get(item['id'])
         if not product:
-            print(f"Product with ID {item['product_id']} not found.")
-            return jsonify({'success': False, 'message': f"Product with ID {item['product_id']} not found."}), 404
+            return jsonify({'success': False, 'message': f"Product with ID {item['id']} not found."}), 404
         if item['quantity'] > product.stock:
-            print(f"Requested quantity for {product.name} exceeds stock.")
-            return jsonify({'success': False, 'message': f"Requested quantity for {product.name} exceeds stock."}), 400
+            return jsonify({'success': False, 'message': f"Quantity for {product.name} exceeds stock."}), 400
 
-        total_price += product.price * item['quantity']
         order_items.append(OrderItem(
+            order_id=order.id,
             product_id=product.id,
             quantity=item['quantity'],
             unit_price=product.price,
             size=item.get('size')
         ))
 
-    order.total_price = total_price
-    db.session.add(order)
+    db.session.bulk_save_objects(order_items)
     db.session.commit()
 
-    for item in order_items:
-        item.order_id = order.id
-        db.session.add(item)
-    db.session.commit()
-
-    print("Order created successfully:", order.id)
     return jsonify({'success': True, 'order_id': order.id}), 201
-
 
 
 
