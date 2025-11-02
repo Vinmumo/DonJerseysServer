@@ -10,11 +10,11 @@ auth_bp = Blueprint('auth', __name__)
 def signup():
     data = request.get_json()
 
-    # Basic validation for required fields
+    
     if not data.get('username') or not data.get('email') or not data.get('password'):
         return jsonify({"message": "Missing required fields"}), 400
 
-    # Check if the username or email already exists
+    
     if User.query.filter_by(username=data['username']).first():
         return jsonify({"message": "Username already exists"}), 400
 
@@ -57,7 +57,7 @@ def login():
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "is_admin": user.is_admin  # Add admin status in response
+            "is_admin": user.is_admin  
         }
     }), 200
 
@@ -93,7 +93,7 @@ def update_profile():
     user.username = data.get('username', user.username)
     user.email = data.get('email', user.email)
 
-    # Optionally update the password
+    
     if data.get('password'):
         user.password_hash = generate_password_hash(data['password'], method='pbkdf2:sha256')
 
@@ -101,7 +101,7 @@ def update_profile():
 
     return jsonify({"message": "Profile updated successfully"}), 200
 
-# Route for user logout (if using JWT Blacklisting, optional)
+# Route for user logout 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():

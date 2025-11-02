@@ -1,4 +1,3 @@
-# utils.py
 import cloudinary.uploader
 
 def upload_image(image):

@@ -69,8 +69,8 @@ class ProductVariant(db.Model):
     size = db.Column(db.String(20), nullable=False)
     edition = db.Column(db.String(50), nullable=False)
     stock = db.Column(db.Integer, nullable=False)
-    badge = db.Column(db.String(50), nullable=True)  # New field for badge type
-    font_type = db.Column(db.String(50), nullable=True)  # New field for font type
+    badge = db.Column(db.String(50), nullable=True)  
+    font_type = db.Column(db.String(50), nullable=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):

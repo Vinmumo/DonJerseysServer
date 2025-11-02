@@ -22,7 +22,7 @@ def get_products():
     # Define sorting logic
     if sort == 'created_at_asc':
         sort_column = Product.created_at.asc()
-    else:  # Default to descending
+    else:  
         sort_column = Product.created_at.desc()
 
     # Query the products, applying sorting
@@ -298,13 +298,13 @@ def create_order():
 
     # Create an Order instance
     order = Order(
-        user_id=None,  # Update this if linking to authenticated users
+        user_id=None,  
         name=name,
         email=email,
         phone=phone,
         location=location,
         total_price=total_price,
-        payment_status='Pending'  # Initial status
+        payment_status='Pending'  
     )
     db.session.add(order)
     db.session.commit()
@@ -353,14 +353,14 @@ def create_order():
 
     return jsonify({'success': True, 'order_id': order.id}), 201
 
-# Function to initiate M-Pesa STK Push (No changes needed unless modifying behavior)
+# Function to initiate M-Pesa STK Push 
 def initiate_mpesa_payment(phone, total_price):
     shortcode = str(174379)
     consumer_key = os.getenv('MPESA_CONSUMER_KEY')
     consumer_secret = os.getenv('MPESA_CONSUMER_SECRET')
     environment = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
     
-    recipient_phone_number = os.getenv('MY_PHONE_NUMBER')  # Ensure this is set in your environment variables
+    recipient_phone_number = os.getenv('MY_PHONE_NUMBER')  
 
     # Step 1: Get access token
     access_token = get_mpesa_access_token()
@@ -387,7 +387,7 @@ def initiate_mpesa_payment(phone, total_price):
         "PartyA": phone,  
         "PartyB": shortcode,  
         "PhoneNumber": phone, 
-        "CallBackURL": "https://yourdomain.com/mpesa/callback",  # Update with your actual callback URL
+        "CallBackURL": "https://yourdomain.com/mpesa/callback",  
         "AccountReference": "Order Payment",
         "TransactionDesc": "Payment for Order"
     }
@@ -502,7 +502,7 @@ def get_orders():
             "id": order.id,
             "user": {
                 "username": order.user.username if order.user else "Guest",
-                "email": order.user.email if order.user else order.email  # Fallback to order email if no user is linked
+                "email": order.user.email if order.user else order.email  
             },
             "name": order.name,
             "phone": order.phone,

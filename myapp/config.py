@@ -5,7 +5,7 @@ from datetime import timedelta
 load_dotenv()
 
 class Config:
-    # General configurations
+    
     SECRET_KEY = os.getenv('SECRET_KEY', '6ce880509867e095b667acbf863b5a987a647c196ed246a7')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///don.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -29,8 +29,8 @@ class Config:
     # Passkey for the Lipa Na Mpesa Online (STK Push) integration
     MPESA_PASSKEY = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf113b1d62f174b4c2')
     
-    # 'sandbox' for testing and 'production' for live environment
+    
     MPESA_ENVIRONMENT = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
     
-    # Your personal phone number to receive payments
+   
     MY_PHONE_NUMBER = os.getenv('MY_PHONE_NUMBER','0757386259')
